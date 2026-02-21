@@ -1,3 +1,4 @@
-flet
+flet==0.25.2
 supabase
 reportlab
+python-dotenv
