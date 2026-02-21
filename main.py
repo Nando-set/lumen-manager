@@ -1,22 +1,23 @@
 import flet as ft
 from vistas import VistasManager
+import os
 
 def main(page: ft.Page):
     # 1. CONFIGURACIÓN VISUAL (MODO MÓVIL)
     page.title = "Moda Spacio System 2.0"
     
     # 🖼️ EL LOGO DE LA APLICACIÓN
-    page.window.icon = "logo.ico" # Si usas .ico, cámbialo a "logo.ico"
+    page.window.icon = "logo.ico" 
     
-    # Tamaño simulado de celular (iPhone 14 Pro aprox)
+    # Tamaño simulado para web
     page.window_width = 390
     page.window_height = 844
     page.window_resizable = True 
     page.padding = 0
     page.theme_mode = ft.ThemeMode.LIGHT
     
-    # --- CORRECCIÓN DEL COLOR DE FONDO ---
-    page.bgcolor = "#F4F6F7"  # El fondo se define aquí ahora
+    # --- FONDO ---
+    page.bgcolor = "#F4F6F7"  
 
     # Colores de la marca 
     page.theme = ft.Theme(
@@ -24,7 +25,6 @@ def main(page: ft.Page):
             primary="#212F3D",      # Azul Oscuro 
             secondary="#28B463",    # Verde 
             surface="#FFFFFF",      # Blanco (Tarjetas)
-            # Ya no ponemos 'background' aquí para evitar el error
         )
     )
 
@@ -35,5 +35,14 @@ def main(page: ft.Page):
     page.on_route_change = manager.router
     page.go('/login')
 
-# 🔥 IMPORTANTE: Agregamos assets_dir="assets" para que la App pueda leer el logo
-ft.app(main, assets_dir="assets")
+# 🔥 CONFIGURACIÓN PARA EL DESPLIEGUE EN WEB 🔥
+if __name__ == "__main__":
+    # Render asigna un puerto dinámico mediante la variable de entorno PORT
+    puerto = int(os.getenv("PORT", 8000))
+    ft.app(
+        target=main, 
+        assets_dir="assets",
+        view=ft.AppView.WEB_BROWSER,
+        port=puerto,
+        host="0.0.0.0" # IMPORTANTE: Permite que Render se conecte a la app
+    )
