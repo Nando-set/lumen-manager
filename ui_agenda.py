@@ -65,7 +65,7 @@ class AgendaInstalaciones(ft.Container):
         )
 
         # 🧾 NUEVO: DIÁLOGO DE DETALLES DE VENTA (SCROLLABLE, COMPLETO Y CON WHATSAPP)
-        self.info_productos = ft.Column(spacing=5) # Le quitamos el scroll aquí para dárselo a toda la ventana
+        self.info_productos = ft.Column(spacing=5) 
         self.info_domicilio = ft.Text(size=14, color="#212F3D")
         self.info_notas = ft.Text(size=13, color="#D35400", italic=True)
         self.btn_maps_detalle = ft.TextButton("Abrir en mapa", icon=ft.icons.LOCATION_ON, icon_color="blue")
@@ -80,7 +80,7 @@ class AgendaInstalaciones(ft.Container):
             title=ft.Row([ft.Icon(ft.icons.RECEIPT_LONG, color="#2980B9"), ft.Text("Detalles de Venta", weight="bold", size=18)]),
             content=ft.Container(
                 width=400,
-                # 🔥 EL MOTOR DE SCROLL ESTÁ AQUÍ. Si la info crece, todo desliza parejo.
+                height=450, # 🔥 FIX iPHONE: Límite estricto de altura para activar el scroll real
                 content=ft.Column([
                     ft.Text("📍 Ubicación Exacta:", weight="bold", color="grey", size=12),
                     ft.Container(
@@ -255,10 +255,15 @@ class AgendaInstalaciones(ft.Container):
         domicilio = inst.get('domicilio', 'Sin Dirección')
         notas_inst = inst.get('notas_instalacion', 'Ninguna')
         
-        # Recuperamos datos financieros
-        total = float(inst.get('total') or 0.0)
-        anticipo = float(inst.get('anticipo') or 0.0)
-        saldo = float(inst.get('saldo') or 0.0)
+        # 🔥 FIX DINERO: Recuperamos datos financieros de manera ultra segura
+        try: total = float(inst.get('total') or 0.0)
+        except: total = 0.0
+        
+        try: anticipo = float(inst.get('anticipo') or 0.0)
+        except: anticipo = 0.0
+        
+        try: saldo = float(inst.get('saldo') or 0.0)
+        except: saldo = 0.0
 
         # Configurar Dirección y Botón Maps
         self.info_domicilio.value = domicilio
@@ -280,7 +285,6 @@ class AgendaInstalaciones(ft.Container):
                         bgcolor="#F8F9F9", padding=10, border_radius=8,
                         content=ft.Row([
                             ft.Icon(ft.icons.CHECK_CIRCLE_OUTLINE, size=16, color="#E67E22"),
-                            # expand=True permite que textos muy largos pasen a la siguiente línea
                             ft.Text(desc, size=12, expand=True), 
                             ft.Text(f"${subt:,.2f}", weight="bold", size=12)
                         ])
@@ -291,7 +295,7 @@ class AgendaInstalaciones(ft.Container):
         self.info_anticipo.value = f"${anticipo:,.2f}"
         self.info_saldo.value = f"${saldo:,.2f}"
         
-        # 🔥 Vincular el botón de WhatsApp a nuestra nueva función
+        # Vincular el botón de WhatsApp a nuestra nueva función
         self.btn_wa_instalador.on_click = lambda e: self.enviar_wa_instalador(e, inst, url_mapas)
 
         self.dialogo_info.open = True
@@ -305,7 +309,10 @@ class AgendaInstalaciones(ft.Container):
         hora = inst.get('hora_instalacion', 'Por Asignar')
         domicilio = inst.get('domicilio', 'Sin Dirección')
         notas = inst.get('notas_instalacion', 'Ninguna')
-        saldo = float(inst.get('saldo') or 0.0)
+        
+        # Parseo seguro para WhatsApp también
+        try: saldo = float(inst.get('saldo') or 0.0)
+        except: saldo = 0.0
         
         mensaje = f"📍 *DATOS DE INSTALACIÓN - MODA SPACIO*\n\n"
         mensaje += f"👤 *Cliente:* {cliente}\n"
@@ -318,7 +325,6 @@ class AgendaInstalaciones(ft.Container):
         
         mensaje_codificado = urllib.parse.quote_plus(mensaje)
         
-        # 🔥 EL SECRETO: Al no poner un número de teléfono, WhatsApp abre tu lista de contactos para que elijas a quién mandarlo.
         url_wa = f"https://wa.me/?text={mensaje_codificado}"
         
         self.page.launch_url(url_wa)

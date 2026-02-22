@@ -12,7 +12,6 @@ class Cotizador(ft.Container):
         # --- CURA PARA LA AMNESIA: Cargar de la sesión ---
         self.carrito = self.page.session.get("carrito") or []
         self.total_venta = self.page.session.get("total_venta") or 0.0
-        # 🤫 NUEVA VARIABLE SECRETA: El costo de fábrica total
         self.costo_fabrica_total = self.page.session.get("costo_fabrica_total") or 0.0
         
         self.expand = True
@@ -21,67 +20,86 @@ class Cotizador(ft.Container):
         self.nube = GestorNube()
         productos_nube = self.nube.obtener_productos()
         
+        self.productos_medida = {} # Persianas y Toldos Verticales
+        self.productos_fijos = {}  # Toldos Retráctiles
+        self.motores = {}          # Motores
+
         if productos_nube:
-            self.productos_auto = productos_nube
+            for nombre, datos in productos_nube.items():
+                if "toldo" in nombre.lower() and "vertical" not in nombre.lower():
+                    self.productos_fijos[nombre] = datos
+                elif "motor" in nombre.lower():
+                    self.motores[nombre] = datos
+                else:
+                    self.productos_medida[nombre] = datos
         else:
-            self.productos_auto = {"Sin conexión a Nube": {"precio": 0.0, "limite_ancho": 2.5, "costo_instalacion": 0.0, "precio_fabrica": 0.0}}
+            self.productos_medida = {"Sin conexión a Nube": {"precio": 0.0, "limite_ancho": 2.5, "costo_instalacion": 0.0, "precio_fabrica": 0.0}}
 
         # ==========================================
-        # 1. CONTROLES PESTAÑA AUTOMÁTICO (OPTIMIZADOS PARA MÓVIL 📱)
+        # 1. CONTROLES PESTAÑA AUTOMÁTICO (PERSIANAS)
         # ==========================================
-        self.dd_producto = ft.Dropdown(label="Seleccionar Persiana", options=[ft.dropdown.Option(k) for k in self.productos_auto.keys()], expand=True, on_change=self.al_cambiar_producto, label_style=ft.TextStyle(weight="bold"))
+        self.dd_producto = ft.Dropdown(
+            label="Seleccionar Persiana / T. Vertical", 
+            options=[ft.dropdown.Option(k) for k in self.productos_medida.keys()], 
+            expand=True, 
+            on_change=self.al_cambiar_producto, 
+            label_style=ft.TextStyle(weight="bold")
+        )
         
-        # 🔥 EL SECRETO: Quitamos los 'width' fijos y usamos 'expand=True' para que se adapten como líquido
         self.in_precio_base = ft.TextField(label="Precio m2", read_only=True, prefix_text="$", text_style=ft.TextStyle(color="#C0392B", weight="bold", size=13), label_style=ft.TextStyle(weight="bold", size=12), expand=True)
-        self.in_ancho = ft.TextField(label="Ancho (m)", keyboard_type="number", on_change=self.calcular_piezas_auto, text_style=ft.TextStyle(weight="bold", size=14), label_style=ft.TextStyle(weight="bold", color="#2980B9", size=12), expand=True)
-        self.in_alto = ft.TextField(label="Alto (m)", keyboard_type="number", text_style=ft.TextStyle(weight="bold", size=14), label_style=ft.TextStyle(weight="bold", color="#2980B9", size=12), expand=True)
+        # 🍏 TECLADOS FORZADOS PARA iOS A CONTINUACIÓN:
+        self.in_ancho = ft.TextField(label="Ancho (m)", keyboard_type=ft.KeyboardType.NUMBER, on_change=self.calcular_piezas_auto, text_style=ft.TextStyle(weight="bold", size=14), label_style=ft.TextStyle(weight="bold", color="#2980B9", size=12), expand=True)
+        self.in_alto = ft.TextField(label="Alto (m)", keyboard_type=ft.KeyboardType.NUMBER, text_style=ft.TextStyle(weight="bold", size=14), label_style=ft.TextStyle(weight="bold", color="#2980B9", size=12), expand=True)
         
-        self.in_espacios = ft.TextField(label="Espacios", value="1", keyboard_type="number", on_change=self.calcular_piezas_auto, text_style=ft.TextStyle(weight="bold", size=14), expand=True)
-        self.in_pzas_inst = ft.TextField(label="Pzas (Inst)", value="1", keyboard_type="number", text_style=ft.TextStyle(color="red", weight="bold", size=14), expand=True)
+        self.in_espacios = ft.TextField(label="Espacios", value="1", keyboard_type=ft.KeyboardType.NUMBER, on_change=self.calcular_piezas_auto, text_style=ft.TextStyle(weight="bold", size=14), expand=True)
+        self.in_pzas_inst = ft.TextField(label="Pzas (Inst)", value="1", keyboard_type=ft.KeyboardType.NUMBER, text_style=ft.TextStyle(color="red", weight="bold", size=14), expand=True)
 
         panel_auto = ft.Column([
             self.dd_producto,
             ft.Row([self.in_precio_base, self.in_ancho, self.in_alto], spacing=10),
             ft.Row([self.in_espacios, self.in_pzas_inst], spacing=10),
-            ft.ElevatedButton("AGREGAR AL CARRITO", bgcolor="#2E86C1", color="white", on_click=self.agregar_auto, width=float('inf'))
+            ft.ElevatedButton("AGREGAR COTIZACIÓN", bgcolor="#2E86C1", color="white", on_click=self.agregar_auto, width=float('inf'))
         ], spacing=15)
 
         # ==========================================
-        # 2. CONTROLES PESTAÑA TOLDOS
+        # 2. CONTROLES PESTAÑA TOLDOS Y MOTORES
         # ==========================================
-        self.drop_toldos = ft.Dropdown(label="Medida del Toldo", options=[ft.dropdown.Option("Toldo 3.95 x 3.00"), ft.dropdown.Option("Toldo 5.95 x 3.50")], expand=True)
-        self.switch_motor = ft.Switch(label="Incluir Motor", value=False, expand=True)
-        self.in_cant_toldo = ft.TextField(label="Cant.", value="1", keyboard_type="number", expand=True)
+        opciones_toldos = [ft.dropdown.Option(k) for k in self.productos_fijos.keys()]
+        if not opciones_toldos: opciones_toldos = [ft.dropdown.Option("No hay toldos fijos registrados")]
+        self.drop_toldos = ft.Dropdown(label="Seleccionar Toldo Fijo", options=opciones_toldos, expand=True)
+        
+        opciones_motores = [ft.dropdown.Option("Sin Motor")] + [ft.dropdown.Option(k) for k in self.motores.keys()]
+        self.drop_motores = ft.Dropdown(label="¿Agregar Motor?", options=opciones_motores, value="Sin Motor", expand=True)
+        
+        # 🍏 TECLADO FORZADO PARA iOS:
+        self.in_cant_toldo = ft.TextField(label="Cantidad", value="1", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
 
         panel_toldos = ft.Column([
             self.drop_toldos,
-            ft.Row([self.switch_motor, self.in_cant_toldo], spacing=10),
-            ft.ElevatedButton("AGREGAR TOLDO", bgcolor="#D35400", color="white", on_click=self.agregar_toldo, width=float('inf'))
+            ft.Row([self.drop_motores, self.in_cant_toldo], spacing=10),
+            ft.ElevatedButton("AGREGAR COTIZACIÓN", bgcolor="#D35400", color="white", on_click=self.agregar_toldo, width=float('inf'))
         ], spacing=15)
 
-        # 🚀 TABS LIMPIOS (Altura aumentada a 320 para que quepa todo en el celular sin cortarse)
+        # 🚀 TABS LIMPIOS
         self.tabs = ft.Tabs(
             selected_index=0, animation_duration=300, height=320,
             tabs=[
-                ft.Tab(text="🤖 Automático", content=ft.Container(padding=10, content=panel_auto)),
-                ft.Tab(text="🏕️ Toldos", content=ft.Container(padding=10, content=panel_toldos))
+                ft.Tab(text="🤖 A Medida", content=ft.Container(padding=10, content=panel_auto)),
+                ft.Tab(text="🏕️ Toldos Fijos", content=ft.Container(padding=10, content=panel_toldos))
             ]
         )
 
         self.lista_ui = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO)
         self.lbl_total = ft.Text(f"${self.total_venta:,.2f}", size=24, weight="bold", color="white")
         
-        # --- EL BOTÓN DE LIMPIAR ---
         self.btn_limpiar = ft.IconButton(icon=ft.icons.DELETE_SWEEP, icon_color="red", tooltip="Vaciar todo el carrito", on_click=self.limpiar_carrito)
 
-        # 🔥 Agregamos ScrollMode.AUTO a la columna principal para pantallas pequeñas
         self.content = ft.Column([
             ft.Row([ft.Icon(ft.icons.SHOPPING_BASKET, size=30, color="#212F3D"), ft.Text("NUEVA VENTA", size=22, weight="bold", color="#212F3D")]),
             ft.Container(bgcolor="white", border_radius=10, padding=5, shadow=ft.BoxShadow(blur_radius=5, color=ft.colors.with_opacity(0.1, "black")), content=self.tabs),
             ft.Text("🛒 TUS PRODUCTOS:", weight="bold"),
             ft.Container(content=self.lista_ui, border=ft.border.all(1, "#E5E7E9"), border_radius=10, padding=10, expand=True),
             
-            # FOOTER CON EL BOTÓN INCLUIDO
             ft.Container(bgcolor="#212F3D", padding=15, border_radius=10, content=ft.Row([
                 ft.Text("TOTAL NETO:", size=16, weight="bold", color="white"), 
                 ft.Row([self.lbl_total, self.btn_limpiar])
@@ -112,35 +130,46 @@ class Cotizador(ft.Container):
         for item in self.carrito:
             self._dibujar_fila(item)
 
-    # --- LÓGICA DE CÁLCULOS ---
+    # --- LÓGICA DE CÁLCULOS DINÁMICOS ---
     def al_cambiar_producto(self, e):
-        nombre = self.dd_producto.value
-        if nombre and nombre in self.productos_auto:
-            precio = self.productos_auto[nombre].get("precio", 0.0) 
-            self.in_precio_base.value = f"{precio}"
-            self.calcular_piezas_auto(e)
-        self.page.update()
+        # Dispara el cálculo visual inmediatamente al seleccionar el producto
+        self.calcular_piezas_auto(e)
 
     def calcular_piezas_auto(self, e):
         nombre = self.dd_producto.value
         if not nombre or nombre == "Sin conexión a Nube": return
-        try:
-            ancho = float(self.in_ancho.value) if self.in_ancho.value else 0.0
-            espacios = int(self.in_espacios.value) if self.in_espacios.value else 1
-        except ValueError: return
+        
+        datos = self.productos_medida.get(nombre, {})
+        precio_normal = float(datos.get("precio", 0.0))
+        precio_2 = float(datos.get("precio_2", 0.0))
+        limite_ancho = float(datos.get("limite_ancho", 2.5))
+        if limite_ancho <= 0: limite_ancho = 2.5
 
+        try:
+            ancho_str = self.in_ancho.value.strip()
+            ancho = float(ancho_str) if ancho_str else 0.0
+            espacios = int(self.in_espacios.value) if self.in_espacios.value else 1
+        except ValueError:
+            ancho = 0.0
+            espacios = 1
+
+        # 🔥 1. LA MAGIA VISUAL: Si el ancho supera el límite, cambiamos el precio en pantalla
+        precio_aplicar = precio_normal
+        if precio_2 > 0 and ancho > limite_ancho:
+            precio_aplicar = precio_2
+            
+        self.in_precio_base.value = f"{precio_aplicar}"
+
+        # 2. CÁLCULO DE PIEZAS DE INSTALACIÓN
         if "cortin" in nombre.lower():
             divisiones_base = 1
         else:
-            datos = self.productos_auto.get(nombre, {})
-            limite = float(datos.get("limite_ancho", 2.5))
-            if limite <= 0: limite = 2.5 
-            divisiones_base = math.ceil(ancho / limite) if ancho > 0 else 1
+            divisiones_base = math.ceil(ancho / limite_ancho) if ancho > 0 else 1
                 
         self.in_pzas_inst.value = str(divisiones_base * espacios)
         self.page.update()
 
-    # --- AGREGAR PRODUCTOS ---
+    # --- AGREGAR PRODUCTOS A MEDIDA ---
     def agregar_auto(self, e):
         nombre = self.dd_producto.value
         if not nombre or nombre == "Sin conexión a Nube": return
@@ -149,10 +178,28 @@ class Cotizador(ft.Container):
             alto = float(self.in_alto.value)
             espacios = int(self.in_espacios.value)
             pzas_fisicas = int(self.in_pzas_inst.value) 
-            datos_producto = self.productos_auto[nombre]
-            precio_base = float(datos_producto.get("precio", 0.0))
-            costo_inst = float(datos_producto.get("costo_instalacion", 0.0))
+            datos_producto = self.productos_medida[nombre]
             
+            precio_base = float(datos_producto.get("precio", 0.0))
+            precio_2 = float(datos_producto.get("precio_2", 0.0))
+            limite_ancho = float(datos_producto.get("limite_ancho", 2.5))
+            if limite_ancho <= 0: limite_ancho = 2.5
+            limite_max_fabrica = float(datos_producto.get("limite_precio_2", 0.0))
+            
+            # 🚨 REGLA DE BLOQUEO ABSOLUTO: Supera el máximo de fábrica (Ej: 5.5m)
+            if limite_max_fabrica > 0 and ancho > limite_max_fabrica:
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"❌ Imposible fabricar: El ancho supera el máximo de {limite_max_fabrica}m"), bgcolor="red")
+                self.page.snack_bar.open = True
+                self.page.update()
+                return
+
+            # 🔥 REGLA DE PRECIO 2 (EXCEDENTES)
+            if precio_2 > 0 and ancho > limite_ancho:
+                precio_base = precio_2
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"⚠️ Ancho > {limite_ancho}m. Se aplicó Precio 2 (${precio_base})"), bgcolor="orange")
+                self.page.snack_bar.open = True
+
+            costo_inst = float(datos_producto.get("costo_instalacion", 0.0))
             precio_fabrica_m2 = float(datos_producto.get("precio_fabrica", 0.0))
             
         except Exception as err: 
@@ -176,24 +223,52 @@ class Cotizador(ft.Container):
         self.in_alto.value = ""
         self.in_espacios.value = "1"
         self.in_pzas_inst.value = "1"
+        
+        # Resetear el precio visual al normal
+        self.in_precio_base.value = f"{float(datos_producto.get('precio', 0.0))}"
         self.page.update()
 
-    # 🔥 FUNCIÓN DE TOLDOS RESTAURADA
+    # --- AGREGAR TOLDOS FIJOS Y MOTORES ---
     def agregar_toldo(self, e):
-        modelo = self.drop_toldos.value
-        if not modelo: return
+        nombre_toldo = self.drop_toldos.value
+        nombre_motor = self.drop_motores.value
+        
+        if not nombre_toldo or nombre_toldo == "No hay toldos fijos registrados": 
+            self.page.snack_bar = ft.SnackBar(ft.Text("Selecciona un toldo válido"), bgcolor="red")
+            self.page.snack_bar.open = True
+            self.page.update()
+            return
+            
         try: cant = int(self.in_cant_toldo.value)
         except: return
-        precio_unitario = 13500.0 if "3.95" in modelo else 16500.0
-        if self.switch_motor.value:
-            precio_unitario += 3500.0
-            modelo += " (+ Motor)"
         
-        # Ojo: Toldos los pasamos con costo de fábrica 0 por ahora (lo puedes cambiar después)
-        self._registrar_item(f"[Toldo] {modelo} (x{cant})", precio_unitario * cant, 0.0)
+        datos_toldo = self.productos_fijos.get(nombre_toldo, {})
+        precio_toldo = float(datos_toldo.get("precio", 0.0))
+        costo_fabrica_toldo = float(datos_toldo.get("precio_fabrica", 0.0))
+        costo_inst_toldo = float(datos_toldo.get("costo_instalacion", 0.0))
+        
+        precio_total_unitario = precio_toldo + costo_inst_toldo
+        costo_fabrica_total_unitario = costo_fabrica_toldo
+        desc = f"[Toldo] {nombre_toldo}"
+
+        if nombre_motor and nombre_motor != "Sin Motor":
+            datos_motor = self.motores.get(nombre_motor, {})
+            precio_motor = float(datos_motor.get("precio", 0.0))
+            costo_fab_motor = float(datos_motor.get("precio_fabrica", 0.0))
+            
+            precio_total_unitario += precio_motor
+            costo_fabrica_total_unitario += costo_fab_motor
+            desc += f" (+ {nombre_motor})"
+        
+        precio_final_linea = precio_total_unitario * cant
+        costo_fabrica_final_linea = costo_fabrica_total_unitario * cant
+        
+        if cant > 1: desc += f" (x{cant})"
+        
+        self._registrar_item(desc, precio_final_linea, costo_fabrica_final_linea)
         
         self.in_cant_toldo.value = "1"
-        self.switch_motor.value = False
+        self.drop_motores.value = "Sin Motor"
         self.page.update()
 
     def ir_a_checkout(self, e):

@@ -1,5 +1,5 @@
 from supabase import create_client, Client
-from datetime import datetime # 🔥 LÍNEA PARA EL RELOJ ACTIVA
+from datetime import datetime
 
 class GestorNube:
     def __init__(self):
@@ -87,7 +87,7 @@ class GestorNube:
             anticipo = float(datos_venta.get('anticipo', 0))
             estado_nota = "VENTA" if anticipo > 0 else "PENDIENTES"
             
-            # 🔥 REGISTRO EN VENTAS (Con los nuevos datos de logística)
+            # 🔥 REGISTRO EN VENTAS (Con soporte para método de pago)
             registro = {
                 "cliente": datos_venta.get('cliente'),
                 "telefono": datos_venta.get('telefono'),
@@ -97,6 +97,7 @@ class GestorNube:
                 "total": float(datos_venta.get('total')),
                 "anticipo": anticipo,
                 "saldo": float(datos_venta.get('saldo')),
+                "metodo_pago": datos_venta.get('metodo_pago', 'Efectivo'), # Nuevo dato
                 "estado": estado_nota,
                 "costo_fabrica": float(datos_venta.get('costo_fabrica', 0.0)),
                 "productos": datos_venta.get('productos'),
@@ -107,7 +108,7 @@ class GestorNube:
             }
             self.supabase.table("ventas").insert(registro).execute()
             
-            # 🔥 LA MAGIA: Pasa a la agenda de instalaciones si es VENTA
+            # 🔥 LA MAGIA ARREGLADA: Pasa a la agenda INCLUYENDO EL DINERO
             if estado_nota == "VENTA":
                 registro_inst = {
                     "vendedor": datos_venta.get('vendedor'),
@@ -115,6 +116,9 @@ class GestorNube:
                     "telefono": datos_venta.get('telefono'),
                     "domicilio": datos_venta.get('domicilio'),
                     "productos": datos_venta.get('productos'),
+                    "total": float(datos_venta.get('total')),         # 💸 ¡Dato Financiero Recuperado!
+                    "anticipo": anticipo,                             # 💸 ¡Dato Financiero Recuperado!
+                    "saldo": float(datos_venta.get('saldo')),         # 💸 ¡Dato Financiero Recuperado!
                     "fecha_instalacion": datos_venta.get('fecha_instalacion', 'Por Asignar'),
                     "hora_instalacion": datos_venta.get('hora_instalacion', 'Por Asignar'),
                     "notas_instalacion": datos_venta.get('notas_instalacion', ''),
@@ -137,6 +141,7 @@ class GestorNube:
         except Exception as e:
             print(f"❌ Error al obtener instalaciones: {e}")
             return []
+            
     def actualizar_datos_cliente(self, nombre_cliente, nuevo_telefono, nueva_direccion):
         """Busca todas las notas de este cliente y le actualiza el teléfono y domicilio"""
         try:
@@ -148,6 +153,7 @@ class GestorNube:
         except Exception as e:
             print(f"Error al actualizar cliente: {e}")
             return False        
+            
     # 🚀 NUEVA FUNCIÓN: Para que la jefa pueda editar desde la agenda
     def actualizar_instalacion(self, id_inst, datos_nuevos):
         """Actualiza fecha, hora, estado y notas de una instalación"""

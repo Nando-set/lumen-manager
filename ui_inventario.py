@@ -9,13 +9,13 @@ class Inventario(ft.Container):
         self.expand = True
         self.padding = 20
 
-        # --- PESTAÑAS DE NAVEGACIÓN (AHORA SOLO 2) ---
+        # --- PESTAÑAS DE NAVEGACIÓN (SOLO 2) ---
         self.tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
             tabs=[
-                ft.Tab(text="Persianas", icon=ft.icons.BLINDS),
-                ft.Tab(text="Toldos y Motores", icon=ft.icons.STOREFRONT),
+                ft.Tab(text="Persianas (y T. Verticales)", icon=ft.icons.BLINDS),
+                ft.Tab(text="Toldos Fijos y Motores", icon=ft.icons.STOREFRONT),
             ],
             on_change=lambda _: self.cargar_datos() 
         )
@@ -24,24 +24,35 @@ class Inventario(ft.Container):
         self.id_actual = None
         self.in_nombre = ft.TextField(label="Nombre del Producto", border_radius=10)
         
+        # 🔥 EL CEREBRO DE LA VISIBILIDAD
         self.in_categoria = ft.Dropdown(
             label="Categoría Exacta", border_radius=10,
             options=[
                 ft.dropdown.Option("Persiana"),
                 ft.dropdown.Option("Toldo"),
                 ft.dropdown.Option("Motor")
-            ]
+            ],
+            on_change=self.toggle_reglas_calculo
         )
         
         self.in_precio = ft.TextField(label="Precio Público ($)", keyboard_type="number", border_radius=10, prefix_icon="attach_money", border_color="#28B463")
         self.in_precio_fabrica = ft.TextField(label="Costo Fábrica ($) [Oculto]", keyboard_type="number", border_radius=10, prefix_icon="factory", border_color="#D35400", color="#D35400")
         
         self.in_costo_instalacion = ft.TextField(label="Costo Instalación ($)", keyboard_type="number", border_radius=10, prefix_icon="build")
+        
+        # Campos exclusivos de m2
         self.in_limite_ancho = ft.TextField(label="Límite de ancho (m)", keyboard_type="number", border_radius=10, prefix_icon="straighten")
         self.in_precio_2 = ft.TextField(label="Precio 2 (Excedentes) ($)", keyboard_type="number", border_radius=10)
         self.in_limite_precio_2 = ft.TextField(label="Límite Precio 2 (m)", keyboard_type="number", border_radius=10)
 
         self.lista_productos = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
+
+        # 📦 CONTENEDOR INTELIGENTE
+        self.contenedor_reglas_m2 = ft.Column([
+            ft.Divider(height=10, color="transparent"),
+            ft.Text("REGLAS POR M² (T. Verticales y Persianas)", weight="bold", size=12, color="grey"),
+            self.in_limite_ancho, self.in_precio_2, self.in_limite_precio_2
+        ], spacing=10, visible=True)
 
         self.modal = ft.AlertDialog(
             title=ft.Text("Datos del Producto", weight="bold"),
@@ -50,11 +61,9 @@ class Inventario(ft.Container):
                 content=ft.Column([
                     self.in_nombre, self.in_categoria,
                     ft.Divider(height=10, color="transparent"),
-                    ft.Text("PRECIOS PRINCIPALES", weight="bold", size=12, color="grey"),
-                    self.in_precio, self.in_precio_fabrica,
-                    ft.Divider(height=10, color="transparent"),
-                    ft.Text("REGLAS DE CÁLCULO (Opcionales)", weight="bold", size=12, color="grey"),
-                    self.in_costo_instalacion, self.in_limite_ancho, self.in_precio_2, self.in_limite_precio_2
+                    ft.Text("PRECIOS PRINCIPALES Y LOGÍSTICA", weight="bold", size=12, color="grey"),
+                    self.in_precio, self.in_precio_fabrica, self.in_costo_instalacion,
+                    self.contenedor_reglas_m2
                 ], scroll=ft.ScrollMode.AUTO, tight=True, spacing=10)
             ),
             actions=[
@@ -80,6 +89,11 @@ class Inventario(ft.Container):
 
         self.cargar_datos()
 
+    def toggle_reglas_calculo(self, e=None):
+        es_medida = self.in_categoria.value == "Persiana"
+        self.contenedor_reglas_m2.visible = es_medida
+        self.page.update()
+
     def cargar_datos(self):
         self.lista_productos.controls.clear()
         try:
@@ -94,22 +108,33 @@ class Inventario(ft.Container):
         
         for prod in datos:
             tipo = prod.get('tipo', 'Persiana')
-            # Pestaña 0: Persianas. Pestaña 1: Toldos y Motores
-            if indice_pestana == 0 and tipo == 'Persiana':
+            nombre = prod.get('nombre', '').lower()
+            
+            # 🧠 EL FILTRO INTELIGENTE ANTI-CABLES CRUZADOS
+            es_medida = tipo == 'Persiana' or ('toldo' in nombre and 'vertical' in nombre)
+            es_fijo = tipo == 'Toldo' and 'vertical' not in nombre
+            es_motor = tipo == 'Motor'
+
+            # Pestaña 0: Persianas y T. Verticales
+            if indice_pestana == 0 and es_medida:
                 datos_filtrados.append(prod)
-            elif indice_pestana == 1 and tipo in ['Toldo', 'Motor']:
+            # Pestaña 1: Toldos Retráctiles y Motores
+            elif indice_pestana == 1 and (es_fijo or es_motor):
                 datos_filtrados.append(prod)
 
         for prod in datos_filtrados:
             val_pub = prod.get('precio_base')
             val_fab = prod.get('precio_fabrica')
-            
             precio_pub = float(val_pub) if val_pub is not None else 0.0
             precio_fab = float(val_fab) if val_fab is not None else 0.0
             
             tipo = prod.get('tipo', 'Persiana')
-            icono_cat = ft.icons.BLINDS if tipo == 'Persiana' else ft.icons.STOREFRONT if tipo == 'Toldo' else ft.icons.SETTINGS_INPUT_COMPONENT
-            color_cat = "#3498DB" if tipo == 'Persiana' else "#E67E22" if tipo == 'Toldo' else "#9B59B6"
+            nombre = prod.get('nombre', '').lower()
+            
+            # Asignar iconos correctamente aunque la BD esté mal
+            es_medida = tipo == 'Persiana' or ('toldo' in nombre and 'vertical' in nombre)
+            icono_cat = ft.icons.BLINDS if es_medida else ft.icons.STOREFRONT if tipo == 'Toldo' else ft.icons.SETTINGS_INPUT_COMPONENT
+            color_cat = "#3498DB" if es_medida else "#E67E22" if tipo == 'Toldo' else "#9B59B6"
             
             tarjeta = ft.Container(
                 padding=15, bgcolor="white", border_radius=10,
@@ -123,7 +148,7 @@ class Inventario(ft.Container):
                     ),
                     ft.Column([
                         ft.Text(prod.get('nombre', 'Sin Nombre'), weight="bold", size=15),
-                        ft.Text(tipo, size=11, color="grey"),
+                        ft.Text("A medida" if es_medida else tipo, size=11, color="grey"),
                     ], expand=True, spacing=2),
                     
                     ft.Column([
@@ -151,20 +176,32 @@ class Inventario(ft.Container):
         self.in_precio_2.value = "0"
         self.in_limite_precio_2.value = "0"
         
+        self.toggle_reglas_calculo() 
+        
         self.page.dialog = self.modal
         self.modal.open = True
         self.page.update()
 
     def abrir_modal_editar(self, prod):
         self.id_actual = prod.get('id')
-        self.in_nombre.value = prod.get('nombre', '')
-        self.in_categoria.value = prod.get('tipo', 'Persiana')
+        nombre_prod = prod.get('nombre', '')
+        self.in_nombre.value = nombre_prod
+        
+        tipo_db = prod.get('tipo', 'Persiana')
+        # 🔥 EL ANTÍDOTO: Si detectamos que un Toldo Vertical tiene categoría "Toldo", lo forzamos a "Persiana"
+        if tipo_db == 'Toldo' and 'vertical' in nombre_prod.lower():
+            self.in_categoria.value = 'Persiana'
+        else:
+            self.in_categoria.value = tipo_db
+            
         self.in_precio.value = str(prod.get('precio_base') or "0")
         self.in_precio_fabrica.value = str(prod.get('precio_fabrica') or "0")
         self.in_costo_instalacion.value = str(prod.get('costo_instalacion') or "0")
         self.in_limite_ancho.value = str(prod.get('limite_ancho') or "0")
         self.in_precio_2.value = str(prod.get('precio_2') or "0")
         self.in_limite_precio_2.value = str(prod.get('limite_precio_2') or "0")
+        
+        self.toggle_reglas_calculo()
         
         self.page.dialog = self.modal
         self.modal.open = True
@@ -180,15 +217,17 @@ class Inventario(ft.Container):
                 try: return float(valor) if valor else 0.0
                 except: return 0.0
 
+            es_medida = self.in_categoria.value == "Persiana"
+            
             datos = {
                 "nombre": self.in_nombre.value,
                 "tipo": self.in_categoria.value, 
                 "precio_base": seguro_float(self.in_precio.value),
                 "precio_fabrica": seguro_float(self.in_precio_fabrica.value),
                 "costo_instalacion": seguro_float(self.in_costo_instalacion.value),
-                "limite_ancho": seguro_float(self.in_limite_ancho.value),
-                "precio_2": seguro_float(self.in_precio_2.value),
-                "limite_precio_2": seguro_float(self.in_limite_precio_2.value)
+                "limite_ancho": seguro_float(self.in_limite_ancho.value) if es_medida else 0.0,
+                "precio_2": seguro_float(self.in_precio_2.value) if es_medida else 0.0,
+                "limite_precio_2": seguro_float(self.in_limite_precio_2.value) if es_medida else 0.0
             }
 
             if self.id_actual:

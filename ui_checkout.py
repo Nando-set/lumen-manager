@@ -2,7 +2,7 @@ import flet as ft
 from base_datos import GestorNube
 from reporte import generar_pdf
 import os
-import base64 # 📦 IMPORTANTE: La nueva herramienta para enviar archivos web
+import base64 
 from datetime import datetime, timedelta 
 
 class Checkout(ft.Container):
@@ -13,11 +13,14 @@ class Checkout(ft.Container):
         self.padding = 20
         self.nube = GestorNube() 
 
-        # --- RECUPERAR DATOS ---
+        # --- RECUPERAR DATOS FINANCIEROS Y DE MEMORIA ---
         self.total_venta = self.page.session.get("total_venta") or 0.0
         self.carrito = self.page.session.get("carrito") or []
         self.vendedor_actual = self.page.session.get("usuario_actual") or "Vendedor"
         self.agenda_clientes = self.nube.obtener_clientes_unicos()
+        
+        # 🧠 LA MEMORIA FOTOGRÁFICA DEL FORMULARIO
+        estado_guardado = self.page.session.get("estado_checkout") or {}
 
         # 🚀 LA MAGIA INTERACTIVA: Agregamos los selectores al sistema con LÍMITES
         hoy = datetime.now()
@@ -49,30 +52,40 @@ class Checkout(ft.Container):
         )
         self.page.overlay.append(self.dialogo_recordatorio)
 
-        # --- CAMPOS CLIENTE ---
-        self.in_cliente = ft.TextField(label="Nombre del Cliente", prefix_icon="person", border_radius=10, on_change=self.filtrar_clientes)
+        # --- CAMPOS CLIENTE (Ahora recuperan su valor de la memoria) ---
+        self.in_cliente = ft.TextField(label="Nombre del Cliente", value=estado_guardado.get("cliente", ""), prefix_icon="person", border_radius=10, on_change=self.al_cambiar_cliente)
         self.caja_sugerencias = ft.Column(visible=False, spacing=2)
-        self.in_telefono = ft.TextField(label="Teléfono", prefix_icon="phone", border_radius=10, keyboard_type="phone")
-        self.in_domicilio = ft.TextField(label="Domicilio / Dirección", prefix_icon="home", border_radius=10, multiline=True)
-        self.in_notas = ft.TextField(label="Notas de Venta", prefix_icon="note", border_radius=10, multiline=True)
+        self.in_telefono = ft.TextField(label="Teléfono", value=estado_guardado.get("telefono", ""), prefix_icon="phone", border_radius=10, keyboard_type=ft.KeyboardType.PHONE, on_change=self.guardar_estado)
+        self.in_domicilio = ft.TextField(label="Domicilio / Dirección", value=estado_guardado.get("domicilio", ""), prefix_icon="home", border_radius=10, multiline=True, on_change=self.guardar_estado)
+        self.in_notas = ft.TextField(label="Notas de Venta", value=estado_guardado.get("notas", ""), prefix_icon="note", border_radius=10, multiline=True, on_change=self.guardar_estado)
         self.in_vendedor = ft.TextField(value=self.vendedor_actual, border_radius=10, read_only=True)
         
         # 📅 CAMPOS LOGÍSTICOS 
-        self.in_fecha_inst = ft.TextField(label="Fecha", border_radius=10, expand=True, read_only=True)
+        self.in_fecha_inst = ft.TextField(label="Fecha", value=estado_guardado.get("fecha_inst", ""), border_radius=10, expand=True, read_only=True)
         self.btn_fecha = ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_color="#E67E22", icon_size=30, on_click=lambda _: self.date_picker.pick_date())
         
-        self.in_hora_inst = ft.TextField(label="Hora", border_radius=10, expand=True, read_only=True)
+        self.in_hora_inst = ft.TextField(label="Hora", value=estado_guardado.get("hora_inst", ""), border_radius=10, expand=True, read_only=True)
         self.btn_hora = ft.IconButton(icon=ft.icons.ACCESS_TIME, icon_color="#E67E22", icon_size=30, on_click=lambda _: self.time_picker.pick_time())
 
-        self.in_notas_inst = ft.TextField(label="Detalles", prefix_icon="build", border_radius=10, multiline=True)
+        self.in_notas_inst = ft.TextField(label="Detalles", value=estado_guardado.get("notas_inst", ""), prefix_icon="build", border_radius=10, multiline=True, on_change=self.guardar_estado)
 
-        self.sw_factura = ft.Switch(label="¿Requiere Factura? (+16%)", value=False, active_color="#28B463", on_change=self.calcular_saldo)
+        # ✨ INTERRUPTOR DE MÉTODO DE PAGO (Centrado y con memoria)
+        self.sw_metodo_pago = ft.Switch(
+            label="Efectivo 💵  /  Transferencia 💳", 
+            value=estado_guardado.get("metodo_pago", False), 
+            active_color="#3498DB",
+            label_position=ft.LabelPosition.LEFT,
+            on_change=self.guardar_estado
+        )
+
+        self.sw_factura = ft.Switch(label="¿Requiere Factura? (+16%)", value=estado_guardado.get("factura", False), active_color="#28B463", on_change=self.al_cambiar_saldo)
         
         self.lbl_total_real = ft.Text(f"Total de la Nota: ${self.total_venta:,.2f}", color="#2E86C1", weight="bold", size=16)
         self.lbl_resta = ft.Text("Saldo Pendiente: $0.00", color="#E74C3C", weight="bold")
-        self.in_anticipo = ft.TextField(label="Anticipo dejado ($)", value="0", keyboard_type="number", prefix_icon="attach_money", on_change=self.calcular_saldo)
+        
+        # 🍏 TECLADO iPHONE FIX: Forzando teclado numérico explícito en iOS
+        self.in_anticipo = ft.TextField(label="Anticipo dejado ($)", value=estado_guardado.get("anticipo", "0"), keyboard_type=ft.KeyboardType.NUMBER, prefix_icon="attach_money", on_change=self.al_cambiar_saldo)
 
-        # 🔥 BOTÓN DE GUARDAR AHORA DISPARA LA VALIDACIÓN DEL RADAR
         self.btn_guardar = ft.ElevatedButton(
             content=ft.Row([ft.Icon("picture_as_pdf"), ft.Text("GENERAR NOTA Y GUARDAR", weight="bold")], alignment=ft.MainAxisAlignment.CENTER),
             bgcolor="#212F3D", color="white", height=55, on_click=self.validar_antes_de_procesar
@@ -91,7 +104,13 @@ class Checkout(ft.Container):
             self.in_notas_inst,
             ft.Divider(height=10),
 
+            # 🔥 Botón de pago ahora está centrado estéticamente
+            ft.Container(
+                content=ft.Row([self.sw_metodo_pago], alignment=ft.MainAxisAlignment.CENTER),
+                padding=10
+            ),
             self.sw_factura,
+            
             ft.Container(
                 bgcolor="#EAEDED", padding=15, border_radius=10, margin=ft.margin.only(top=10, bottom=20),
                 content=ft.Column([ft.Text("Resumen Financiero", weight="bold"), self.lbl_total_real, self.in_anticipo, self.lbl_resta])
@@ -100,12 +119,42 @@ class Checkout(ft.Container):
         ], scroll=ft.ScrollMode.AUTO)
         self.calcular_saldo(None)
 
+    # 🧠 EL CEREBRO DE LA MEMORIA FOTOGRÁFICA
+    def guardar_estado(self, e=None):
+        estado = {
+            "cliente": self.in_cliente.value,
+            "telefono": self.in_telefono.value,
+            "domicilio": self.in_domicilio.value,
+            "notas": self.in_notas.value,
+            "fecha_inst": self.in_fecha_inst.value,
+            "hora_inst": self.in_hora_inst.value,
+            "notas_inst": self.in_notas_inst.value,
+            "metodo_pago": self.sw_metodo_pago.value,
+            "factura": self.sw_factura.value,
+            "anticipo": self.in_anticipo.value
+        }
+        self.page.session.set("estado_checkout", estado)
+
+    def al_cambiar_cliente(self, e):
+        self.filtrar_clientes(e)
+        self.guardar_estado()
+
+    def al_cambiar_saldo(self, e):
+        self.calcular_saldo(e)
+        self.guardar_estado()
+
     # ⏱️ FUNCIONES DE LOS CALENDARIOS
     def seleccionar_fecha(self, e):
-        if self.date_picker.value: self.in_fecha_inst.value = self.date_picker.value.strftime("%d/%m/%Y"); self.page.update()
+        if self.date_picker.value: 
+            self.in_fecha_inst.value = self.date_picker.value.strftime("%d/%m/%Y")
+            self.guardar_estado()
+            self.page.update()
 
     def seleccionar_hora(self, e):
-        if self.time_picker.value: self.in_hora_inst.value = self.time_picker.value.strftime("%H:%M"); self.page.update()
+        if self.time_picker.value: 
+            self.in_hora_inst.value = self.time_picker.value.strftime("%H:%M")
+            self.guardar_estado()
+            self.page.update()
 
     def cerrar_dialogo(self, e):
         self.dialogo_recordatorio.open = False
@@ -116,17 +165,14 @@ class Checkout(ft.Container):
         fecha = self.in_fecha_inst.value
         hora = self.in_hora_inst.value
         if not fecha or not hora or fecha == "Por Asignar" or hora == "Por Asignar":
-            # Si no hay fecha, soltamos al perro guardián
             self.dialogo_recordatorio.open = True
             self.page.update()
         else:
-            # Si hay fecha, procesamos directo y el radar revisará los choques
             self.ejecutar_procesar_venta(con_fecha=True)
 
     def guardar_con_recordatorio(self, e):
         self.cerrar_dialogo(None)
         cliente = self.in_cliente.value or "Sin Nombre"
-        # Se envía una alerta a SÍ MISMO para recordar agendar
         self.nube.crear_notificacion(self.vendedor_actual, f"🔔 Recordatorio: Pendiente agendar a {cliente}.", "recordatorio")
         self.ejecutar_procesar_venta(con_fecha=False)
 
@@ -159,6 +205,7 @@ class Checkout(ft.Container):
         self.in_telefono.value = datos['telefono']
         self.in_domicilio.value = datos['domicilio']
         self.caja_sugerencias.visible = False 
+        self.guardar_estado() # Guarda en memoria
         self.page.update()
 
     def calcular_saldo(self, e):
@@ -179,8 +226,9 @@ class Checkout(ft.Container):
         saldo = total_final - anticipo
         costo_fabrica_oculto = self.page.session.get("costo_fabrica_total") or 0.0
         cliente = self.in_cliente.value or "Sin Nombre"
+        
+        metodo_pago = "Transferencia" if self.sw_metodo_pago.value else "Efectivo"
 
-        # 💥 RADAR SILENCIOSO DE CHOQUES
         if con_fecha:
             fecha_nueva = self.in_fecha_inst.value
             hora_nueva = self.in_hora_inst.value
@@ -192,12 +240,11 @@ class Checkout(ft.Container):
                     if otra.get('fecha_instalacion') == fecha_nueva and otra.get('hora_instalacion') not in ["Por Asignar", ""]:
                         try:
                             t_otra = datetime.strptime(otra.get('hora_instalacion'), "%H:%M")
-                            if abs((t_nueva - t_otra).total_seconds()) / 60 < 60: # Menos de 1 hora de diferencia
+                            if abs((t_nueva - t_otra).total_seconds()) / 60 < 60: 
                                 choque = True
                                 break
                         except: pass
                 
-                # Despachar notificaciones según el radar
                 if choque:
                     self.nube.crear_notificacion("admin", f"🚨 CHOKE LOGÍSTICO: {self.vendedor_actual} agendó a {cliente} el {fecha_nueva} a las {hora_nueva}, pero choca con otra cita.", "choque")
                     self.page.snack_bar = ft.SnackBar(ft.Text("⚠️ Hora de alta demanda. Se notificará al Administrador para confirmación."), bgcolor="orange")
@@ -215,6 +262,7 @@ class Checkout(ft.Container):
             "total": total_final,
             "anticipo": anticipo,
             "saldo": saldo,
+            "metodo_pago": metodo_pago, 
             "costo_fabrica": costo_fabrica_oculto,
             "productos": self.carrito,
             "fecha_instalacion": self.in_fecha_inst.value or "Por Asignar",
@@ -227,23 +275,24 @@ class Checkout(ft.Container):
         if exito_nube:
             nombre_cliente_limpio = datos_nota["cliente"].replace(" ", "_")
             nombre_pdf = f"Nota_{nombre_cliente_limpio}.pdf"
+            ruta_pdf = os.path.join("assets", nombre_pdf)
+
             try:
-                generar_pdf(datos_nota, self.carrito, {"total": total_final, "anticipo": anticipo, "saldo": saldo}, nombre_pdf)
+                generar_pdf(datos_nota, self.carrito, {"total": total_final, "anticipo": anticipo, "saldo": saldo}, ruta_pdf)
+                
+                # 🔥 EL TOQUE FINAL: Limpiar los carritos y también nuestra nueva memoria fotográfica
                 self.page.session.set("carrito", [])
                 self.page.session.set("total_venta", 0.0)
                 self.page.session.set("costo_fabrica_total", 0.0)
+                self.page.session.set("estado_checkout", {}) 
                 
                 if not con_fecha:
                     self.page.snack_bar = ft.SnackBar(ft.Text(f"✅ Venta guardada con éxito."), bgcolor="green")
                     self.page.snack_bar.open = True
                     
-                # 🔥 LA CURA WEB: Leemos el PDF, lo codificamos a texto y lo forzamos al navegador
-                with open(nombre_pdf, "rb") as archivo_pdf:
-                    pdf_base64 = base64.b64encode(archivo_pdf.read()).decode('utf-8')
-                
-                self.page.launch_url(f"data:application/pdf;base64,{pdf_base64}", web_window_name="_blank")
-                
+                self.page.launch_url(f"/{nombre_pdf}", web_window_name="_blank")
                 self.page.go('/home')
+                
             except Exception as ex:
                 self.page.snack_bar = ft.SnackBar(ft.Text(f"✅ Guardado, pero error en PDF: {ex}"), bgcolor="orange")
                 self.page.snack_bar.open = True

@@ -9,14 +9,14 @@ def main(page: ft.Page):
     # 🖼️ EL LOGO DE LA APLICACIÓN
     page.window.icon = "logo.ico" 
     
-    # Tamaño simulado para web
+    # Ajustes de visualización para web
     page.window_width = 390
     page.window_height = 844
     page.window_resizable = True 
     page.padding = 0
     page.theme_mode = ft.ThemeMode.LIGHT
     
-    # --- FONDO ---
+    # --- CORRECCIÓN DEL COLOR DE FONDO ---
     page.bgcolor = "#F4F6F7"  
 
     # Colores de la marca 
@@ -35,14 +35,17 @@ def main(page: ft.Page):
     page.on_route_change = manager.router
     page.go('/login')
 
-# 🔥 CONFIGURACIÓN PARA EL DESPLIEGUE EN WEB 🔥
+# 🔥 CONFIGURACIÓN INTELIGENTE (LOCAL VS WEB) 🔥
 if __name__ == "__main__":
-    # Render asigna un puerto dinámico mediante la variable de entorno PORT
+    # Render siempre inyecta la variable "PORT". Tu PC normalmente no.
+    es_produccion = os.getenv("PORT") is not None
     puerto = int(os.getenv("PORT", 8000))
+    
     ft.app(
         target=main, 
         assets_dir="assets",
-        view=ft.AppView.WEB_BROWSER,
-        port=puerto,
-        host="0.0.0.0" # IMPORTANTE: Permite que Render se conecte a la app
+        # Si está en Render, fuerza Web. Si está en tu PC, abre como ventana de App.
+        view=ft.AppView.WEB_BROWSER if es_produccion else ft.AppView.FLET_APP,
+        port=puerto, 
+        host="0.0.0.0" 
     )
