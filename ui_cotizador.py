@@ -47,9 +47,25 @@ class Cotizador(ft.Container):
         )
         
         self.in_precio_base = ft.TextField(label="Precio m2", read_only=True, prefix_text="$", text_style=ft.TextStyle(color="#C0392B", weight="bold", size=13), label_style=ft.TextStyle(weight="bold", size=12), expand=True)
-        # 🍏 TECLADOS FORZADOS PARA iOS A CONTINUACIÓN:
-        self.in_ancho = ft.TextField(label="Ancho (m)", keyboard_type=ft.KeyboardType.NUMBER, on_change=self.calcular_piezas_auto, text_style=ft.TextStyle(weight="bold", size=14), label_style=ft.TextStyle(weight="bold", color="#2980B9", size=12), expand=True)
-        self.in_alto = ft.TextField(label="Alto (m)", keyboard_type=ft.KeyboardType.NUMBER, text_style=ft.TextStyle(weight="bold", size=14), label_style=ft.TextStyle(weight="bold", color="#2980B9", size=12), expand=True)
+        
+        # 🍏 TECLADOS FORZADOS PARA iOS A CONTINUACIÓN (TIPO URL + FILTRO DE NÚMEROS Y COMAS):
+        self.in_ancho = ft.TextField(
+            label="Ancho (m)", 
+            keyboard_type=ft.KeyboardType.URL, 
+            input_filter=ft.InputFilter(allow=True, regex_string=r"^[0-9.,]*$"),
+            on_change=self.calcular_piezas_auto, 
+            text_style=ft.TextStyle(weight="bold", size=14), 
+            label_style=ft.TextStyle(weight="bold", color="#2980B9", size=12), 
+            expand=True
+        )
+        self.in_alto = ft.TextField(
+            label="Alto (m)", 
+            keyboard_type=ft.KeyboardType.URL, 
+            input_filter=ft.InputFilter(allow=True, regex_string=r"^[0-9.,]*$"),
+            text_style=ft.TextStyle(weight="bold", size=14), 
+            label_style=ft.TextStyle(weight="bold", color="#2980B9", size=12), 
+            expand=True
+        )
         
         self.in_espacios = ft.TextField(label="Espacios", value="1", keyboard_type=ft.KeyboardType.NUMBER, on_change=self.calcular_piezas_auto, text_style=ft.TextStyle(weight="bold", size=14), expand=True)
         self.in_pzas_inst = ft.TextField(label="Pzas (Inst)", value="1", keyboard_type=ft.KeyboardType.NUMBER, text_style=ft.TextStyle(color="red", weight="bold", size=14), expand=True)
@@ -146,7 +162,9 @@ class Cotizador(ft.Container):
         if limite_ancho <= 0: limite_ancho = 2.5
 
         try:
-            ancho_str = self.in_ancho.value.strip()
+            # 🔥 AQUÍ SE REEMPLAZA LA COMA POR EL PUNTO AUTOMÁTICAMENTE
+            ancho_val = self.in_ancho.value if self.in_ancho.value else ""
+            ancho_str = ancho_val.replace(",", ".").strip()
             ancho = float(ancho_str) if ancho_str else 0.0
             espacios = int(self.in_espacios.value) if self.in_espacios.value else 1
         except ValueError:
@@ -174,8 +192,12 @@ class Cotizador(ft.Container):
         nombre = self.dd_producto.value
         if not nombre or nombre == "Sin conexión a Nube": return
         try:
-            ancho = float(self.in_ancho.value)
-            alto = float(self.in_alto.value)
+            # 🔥 AQUÍ TAMBIÉN SE REEMPLAZAN LAS COMAS POR PUNTOS ANTES DE CALCULAR
+            ancho_val = self.in_ancho.value if self.in_ancho.value else "0"
+            alto_val = self.in_alto.value if self.in_alto.value else "0"
+            
+            ancho = float(ancho_val.replace(",", "."))
+            alto = float(alto_val.replace(",", "."))
             espacios = int(self.in_espacios.value)
             pzas_fisicas = int(self.in_pzas_inst.value) 
             datos_producto = self.productos_medida[nombre]
