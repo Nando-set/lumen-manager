@@ -25,11 +25,11 @@ class LoginScreen(ft.Container):
             keyboard_type="number", password=True, can_reveal_password=True
         )
         
-        # 🍏 FORZAMOS TECLADO ALFANUMÉRICO PARA iOS EN EL CÓDIGO
+        # 🍏 HACK DEFINITIVO ANTI-IPHONE PARA EL CÓDIGO
         self.reg_codigo = ft.TextField(
             label="Código de Autorización", border_radius=10, 
-            keyboard_type=ft.KeyboardType.TEXT, # <-- AQUÍ ESTÁ LA MAGIA ANTI-IPHONE
-            password=True, prefix_icon="vpn_key", can_reveal_password=True
+            password=True, prefix_icon="vpn_key", can_reveal_password=True,
+            autofill_hints=[ft.AutofillHint.NAME] # <-- Engaño para forzar el teclado de letras en iOS
         )
 
         # --- CONTENEDORES ---
